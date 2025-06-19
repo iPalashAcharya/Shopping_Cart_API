@@ -1,0 +1,100 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.pnpm-store/
+.env
+.DS_Store
+Thumbs.db
+*.log
+logs/
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.vscode-test
+
+# Dependency management
+jspm_packages/
+
+# Production
+build/
+dist/
+tmp/
+temp/
+coverage/
+
+# Misc
+.cache/
+.nyc_output/
+*.tgz
+.eslintcache
+.prettierignore
+.prettierrc.jsonc
+*.tsbuildinfo
+/.aws-sam/
+.scannerwork/ # SonarQube
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Next.js specific (if applicable)
+.next/
+out/
+
+# Nuxt.js specific (if applicable)
+.nuxt/
+.output/
+
+# Gatsby specific (if applicable)
+.cache/
+public/
+
+# SvelteKit specific (if applicable)
+.svelte-kit/
+build/
+
+# Remix specific (if applicable)
+build/
+public/build/
+
+# macOS specific
+.DS_Store
+
+# Windows specific
+Thumbs.db
+
+# Other common OS files
+ehthumbs.db
+Desktop.ini
+
+# Docker
+.dockerignore
+
+# Netlify
+.netlify/
+
+# Vercel
+.vercel/
+
+# TypeScript (if not handled by build output)
+*.js.map
+*.d.ts
+
+# Yarn Plug'n'Play (if applicable)
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.cjs
+
+# PNPM specific
+pnpm-lock.yaml
