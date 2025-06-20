@@ -111,6 +111,7 @@ router.put('/cart/:id/items/:itemId', async (req, res) => {
     const client = await pool.connect();
     try {
         const result1 = await client.query("SELECT metadata,quantity FROM cart_item WHERE cart_item_id = $1 AND cart_id = $2", [req.params.itemId, req.params.id]);
+        console.log(result1.rows);
         const existingMetadata = result1.rows[0].metadata;
         const existingQuantity = result1.rows[0].quantity;
         const metadata = req.body.metadata || existingMetadata;
