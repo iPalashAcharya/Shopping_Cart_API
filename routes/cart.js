@@ -40,6 +40,27 @@ router.get('/', async (req, res) => {
     }
 });
 
+//sharing cart to public
+router.get('/share/:id', async (req, res) => {
+    const cart_id = req.params.id;
+    if (!cart_id) return res.status(404).json({ error: 'No cart found' });
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`SELECT ci.cart_item_id, ci.product_id, ci.variant_id, ci.quantity, p.price AS current_price, (p.price * ci.quantity) AS line_total, ci.metadata FROM cart_item ci JOIN product p ON ci.product_id = p.product_id WHERE ci.cart_id = $1`, [cart_id]);
+        const items = result.rows;
+        const subtotal = items.reduce((acc, item) => acc + parseFloat(item.line_total), 0); //reduce reduces elements of items array to a single value ie the subtotal, start with accumulator=0
+        const taxRate = 0.1; // 10% flat tax
+        const tax = subtotal * taxRate;
+        const total = subtotal + tax;
+        res.json({ cart_id, items, subtotal: subtotal.toFixed(2), tax: tax.toFixed(2), total: total.toFixed(2) });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to fetch cart' });
+    } finally {
+        client.release();
+    }
+});
+
 router.post('/cart/:id/items', async (req, res) => {
     const { productId, variantId, quantity, metadata } = req.body; //not taking price from the client for security
     const client = await pool.connect();
@@ -50,7 +71,8 @@ router.post('/cart/:id/items', async (req, res) => {
         if (inv.rows[0]?.inventory < quantity) {
             return res.status(400).json({ error: 'Not enough inventory' });
         }
-        const result = await client.query("INSERT INTO cart_item(cart_id,product_id,variant_id,quantity,price_at_time,metadata) VALUES($1,$2,$3,$4,$5,$6) RETURNING *", [req.params.id, productId, variantId, quantity, livePrice, metadata]);
+        const result = await client.query("INSERT INTO cart_item(cart_id,product_id,variant_id,quantity,price_at_time,metadata) VALUES($1,$2,$3,$4,$5,$6) RETURNING *", [req.params.id, productId, variantId, quantity, livePrice, metadata || null]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'ADD_ITEM', `Added product ${productId}`])
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -75,6 +97,7 @@ router.post('/items', async (req, res) => {
             return res.status(400).json({ error: 'Not enough inventory' });
         }
         const result = await client.query(`INSERT INTO cart_item (cart_id, product_id, variant_id, quantity, price_at_time, metadata) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [cartId, productId, variantId, quantity, livePrice, metadata || null]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'ADD_ITEM', `Added product ${productId}`]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -93,6 +116,7 @@ router.put('/cart/:id/items/:itemId', async (req, res) => {
         const metadata = req.body.metadata || existingMetadata;
         const quantity = req.body.quantity || existingQuantity;
         const result = await client.query(`UPDATE cart_item SET quantity = $1, metadata = $2 WHERE cart_id = $3 AND cart_item_id = $4 RETURNING *`, [quantity, metadata, req.params.id, req.params.itemId]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'UPDATE_ITEM', `Updated product ${req.params.itemId}`]);
         res.json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -106,6 +130,7 @@ router.delete('/cart/:id/items/:itemId', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query(`DELETE FROM cart_item WHERE cart_id = $1 AND cart_item_id = $2`, [req.params.id, req.params.itemId]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'DELETE_ITEM', `Deleted product ${req.params.itemId}`]);
         res.status(204).send();
     } catch (err) {
         console.error(err);
@@ -119,6 +144,7 @@ router.delete('/cart/:id', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query(`DELETE FROM cart_item WHERE cart_id = $1`, [req.params.id]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'DELETE_ALL_ITEM', `Deleted all products from ${req.params.id}`]);
         res.status(204).send();
     } catch (err) {
         console.error(err);
@@ -133,10 +159,71 @@ router.delete('/cart', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query(`DELETE FROM cart_item WHERE cart_id = $1`, [cartId]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'DELETE_ALL_ITEM', `Deleted all products from ${req.params.id}`]);
         res.status(204).send();
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Failed to clear cart' });
+    }
+});
+
+//wishlist
+router.post('/wishlist', async (req, res) => {
+    const client = await pool.connect();
+    const { productId, variantId, quantity, metadata } = req.body;
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ error: 'Login required to save wishlist' });
+    try {
+        const result = await client.query(
+            `INSERT INTO wishlist (user_id, product_id, variant_id, quantity, metadata)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [userId, productId, variantId, quantity, metadata || null]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to save item to wishlist' });
+    } finally {
+        client.release();
+    }
+});
+
+router.get('/wishlist', async (req, res) => {
+    const client = await pool.connect();
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ error: 'Login required to fetch wishlist' });
+    try {
+        const result = await client.query(
+            `SELECT w.*, p.name, p.price FROM wishlist w
+             JOIN product p ON w.product_id = p.product_id
+             WHERE w.user_id = $1`,
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to fetch wishlist' });
+    } finally {
+        client.release();
+    }
+});
+
+router.delete('/wishlist/:id', async (req, res) => {
+    const client = await pool.connect();
+    const userId = req.session.userId;
+    const itemId = req.params.id;
+    if (!userId) return res.status(401).json({ error: 'Login required to modify wishlist' });
+    try {
+        await client.query(
+            `DELETE FROM wishlist WHERE wishlist_id = $1 AND user_id = $2`,
+            [itemId, userId]
+        );
+        res.status(204).send();
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to remove item from wishlist' });
+    } finally {
+        client.release();
     }
 });
 
