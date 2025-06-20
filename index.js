@@ -2,7 +2,7 @@ const express = require('express');
 const env = require('dotenv');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
-const { pool, safeEnd } = require('./db');
+const { pool, safeEndPool } = require('./db');
 const authRoutes = require('./routes/auth');
 const cartRoutes = require('./routes/cart');
 
@@ -27,9 +27,9 @@ app.use(
 app.use(express.json());
 
 app.use('/auth', authRoutes);
-app.use('/cart', cartRoutes);
+app.use('/', cartRoutes);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
 
@@ -37,7 +37,7 @@ process.on('SIGINT', async () => {
     console.log('Gracefully shutting down...');
     server.close(async () => {
         try {
-            await safeEnd();
+            await safeEndPool();
         } catch (err) {
             console.error('Error closing database pool:', err);
         } finally {

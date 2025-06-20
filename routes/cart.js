@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const { pool } = require('../db');
 
 router.post('/cart', async (req, res) => {
     const client = await pool.connect();
@@ -26,12 +26,12 @@ router.get('/', async (req, res) => {
     try {
         const result = await client.query(`SELECT ci.cart_item_id, ci.product_id, ci.variant_id, ci.quantity, p.price AS current_price, (p.price * ci.quantity) AS line_total, ci.metadata FROM cart_item ci JOIN product p ON ci.product_id = p.product_id WHERE ci.cart_id = $1`, [cart_id]);
         const items = result.rows;
-        const subtotal = items.reduce((acc, item) => acc + (item.line_total), 0); //reduce reduces elements of items array to a single value ie the subtotal, start with accumulator=0
+        const subtotal = items.reduce((acc, item) => acc + parseFloat(item.line_total), 0); //reduce reduces elements of items array to a single value ie the subtotal, start with accumulator=0
         const taxRate = 0.1; // 10% flat tax
         const tax = subtotal * taxRate;
         const total = subtotal + tax;
 
-        res.json({ cart_id, items, subtotal, tax, total });
+        res.json({ cart_id, items, subtotal: subtotal.toFixed(2), tax: tax.toFixed(2), total: total.toFixed(2) });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Failed to fetch cart' });
@@ -85,10 +85,14 @@ router.post('/items', async (req, res) => {
 });
 
 router.put('/cart/:id/items/:itemId', async (req, res) => {
-    const { quantity, metadata } = req.body;
     const client = await pool.connect();
     try {
-        const result = await client.query(`UPDATE cart_item SET quantity = $1, metadata = $2 WHERE cart_id = $3 AND cart_item_id = $4 RETURNING *`, [quantity, metadata || null, req.params.id, req.params.itemId]);
+        const result1 = await client.query("SELECT metadata,quantity FROM cart_item WHERE cart_item_id = $1 AND cart_id = $2", [req.params.itemId, req.params.id]);
+        const existingMetadata = result1.rows[0].metadata;
+        const existingQuantity = result1.rows[0].quantity;
+        const metadata = req.body.metadata || existingMetadata;
+        const quantity = req.body.quantity || existingQuantity;
+        const result = await client.query(`UPDATE cart_item SET quantity = $1, metadata = $2 WHERE cart_id = $3 AND cart_item_id = $4 RETURNING *`, [quantity, metadata, req.params.id, req.params.itemId]);
         res.json(result.rows[0]);
     } catch (err) {
         console.error(err);

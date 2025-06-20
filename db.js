@@ -19,4 +19,4 @@ async function safeEndPool() {
     await connectionPool.end();
 }
 
-module.exports = { connectionPool, safeEndPool, };
+module.exports = { pool: connectionPool, safeEndPool, };
