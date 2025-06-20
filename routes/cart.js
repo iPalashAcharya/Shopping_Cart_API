@@ -97,7 +97,7 @@ router.post('/items', async (req, res) => {
             return res.status(400).json({ error: 'Not enough inventory' });
         }
         const result = await client.query(`INSERT INTO cart_item (cart_id, product_id, variant_id, quantity, price_at_time, metadata) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [cartId, productId, variantId, quantity, livePrice, metadata || null]);
-        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'ADD_ITEM', `Added product ${productId}`]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [cartId, 'ADD_ITEM', `Added product ${productId}`]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -159,7 +159,7 @@ router.delete('/cart', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query(`DELETE FROM cart_item WHERE cart_id = $1`, [cartId]);
-        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [req.params.id, 'DELETE_ALL_ITEM', `Deleted all products from ${req.params.id}`]);
+        await client.query(`INSERT INTO cart_log (cart_id, action, message) VALUES ($1, $2, $3)`, [cartId, 'DELETE_ALL_ITEM', `Deleted all products from ${req.params.id}`]);
         res.status(204).send();
     } catch (err) {
         console.error(err);
@@ -170,14 +170,14 @@ router.delete('/cart', async (req, res) => {
 //wishlist
 router.post('/wishlist', async (req, res) => {
     const client = await pool.connect();
-    const { productId, variantId, quantity, metadata } = req.body;
+    const { productId, variantId, metadata } = req.body;
     const userId = req.session.userId;
     if (!userId) return res.status(401).json({ error: 'Login required to save wishlist' });
     try {
         const result = await client.query(
-            `INSERT INTO wishlist (user_id, product_id, variant_id, quantity, metadata)
-             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [userId, productId, variantId, quantity, metadata || null]
+            `INSERT INTO wishlist (user_id, product_id, variant_id, metadata)
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [userId, productId, variantId, metadata || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
